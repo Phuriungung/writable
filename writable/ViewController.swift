@@ -1,88 +1,111 @@
+//
+//  QuadBezierCurveDrawView.swift
+//  BezierCurveDrawing
+//
+//  Created by Nick Dalton on 2/17/17.
+//
+
 import UIKit
 
-class Canvas: UIView {
-    var path = UIBezierPath()
-    var strokeColor = UIColor.black
-    var strokeWidth: CGFloat = 10.0
-    var previousPoint: CGPoint?
-    var points = [CGPoint]() // Store points for Catmull-Rom spline
-    
-    override func draw(_ rect: CGRect) {
-        strokeColor.setStroke()
-        path.lineWidth = strokeWidth
-        path.lineCapStyle = .round
-        path.lineJoinStyle = .round
-        path.stroke()
-    }
+
+class QuadBezierCurveDrawView: BezierPathDrawView {
+
+    var points = [CGPoint]()
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        let location = touch.location(in: self)
-        path.move(to: location)
-        previousPoint = location
-        points.append(location) // Add point for Catmull-Rom spline
-        setNeedsDisplay()
+        super.touchesBegan(touches, with: event)
+        
+        guard let touch = touches.first, shouldUseTouchEventForDrawing(touch) else {
+            return
+        }
+        
+        let point = touch.preciseLocation(in: self)
+        self.points.removeAll()
+        self.points.append(point)
     }
     
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first, let previousPoint = previousPoint else { return }
-        let location = touch.location(in: self)
+        super.touchesMoved(touches, with: event)
         
-        addSmoothCurve(to: location, from: previousPoint)
+        guard let touch = touches.first, shouldUseTouchEventForDrawing(touch) else {
+            return
+        }
         
-        points.append(location) // Add point for Catmull-Rom spline
+        let point = touch.preciseLocation(in: self)
+        self.points.append(point)
         
-        self.previousPoint = location
-        
-        setNeedsDisplay()
+        if self.points.count == 4 {
+            let middlePoint = CGPoint(x: (self.points[1].x + self.points[3].x) / 2.0,
+                                      y: (self.points[1].y + self.points[3].y) / 2.0)
+            
+            currentPath()?.move(to: self.points[0])
+            currentPath()?.addQuadCurve(to: middlePoint, controlPoint: self.points[1])
+            
+            // replace points and get ready to handle the next segment
+            let lastPoint = self.points[3]
+            self.points.removeAll()
+            self.points.append(middlePoint)
+            self.points.append(lastPoint)
+            
+            // This is not an optimal refresh algorithm. But it works well for short paths. And it's better than full screen refresh.
+            let refreshRect = currentPath()?.bounds.insetBy(dx: -self.lineWidth, dy: -self.lineWidth) ?? self.bounds
+            setNeedsDisplay(refreshRect)
+        }
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        points.removeAll() // Clear points when touch ends
-    }
-    
-    private func addSmoothCurve(to endPoint: CGPoint, from startPoint: CGPoint) {
-        let interpolatedPoints = interpolatePoints(p0: startPoint, p1: endPoint)
-        
-        for i in 1..<interpolatedPoints.count - 1 { // Adjusted iteration range
-            path.addQuadCurve(to: interpolatedPoints[i],
-                              controlPoint: controlPointForPoints(p0: interpolatedPoints[i - 1],
-                                                                 p1: interpolatedPoints[i],
-                                                                 p2: interpolatedPoints[i + 1]))
+        guard let touch = touches.first, shouldUseTouchEventForDrawing(touch) else {
+            return
         }
+        
+        // Draw remaining points
+                if self.points.count == 1 {    // only one point acquired = user tapped on the screen
+                    // draw "point"
+                    currentPath()?.lineWidth = self.lineWidth / 2.0
+                    currentPath()?.addArc(withCenter: self.points[0], radius: lineWidth / 4.0, startAngle: 0, endAngle: .pi * 2.0, clockwise: true)
+                    setNeedsDisplay(CGRect(x: self.points[0].x - self.lineWidth, y: self.points[0].y - self.lineWidth,
+                                           width: self.lineWidth * 2.0, height: self.lineWidth * 2.0))
+
+                } else if self.points.count == 2 {
+                    currentPath()?.move(to: self.points[0])
+                    currentPath()?.addLine(to: self.points[1])
+                    
+                    // Create a CGRect from the two points
+                    let rect = CGRect(x: min(self.points[0].x, self.points[1].x) - self.lineWidth,
+                                      y: min(self.points[0].y, self.points[1].y) - self.lineWidth,
+                                      width: abs(self.points[1].x - self.points[0].x) + 2 * self.lineWidth,
+                                      height: abs(self.points[1].y - self.points[0].y) + 2 * self.lineWidth)
+                    setNeedsDisplay(rect)
+                    
+                } else if self.points.count == 3 {
+                    currentPath()?.move(to: self.points[0])
+                    currentPath()?.addQuadCurve(to: self.points[2], controlPoint: self.points[1])
+                    
+                    // Create a CGRect from the three points
+                    let minX = min(self.points[0].x, self.points[1].x, self.points[2].x) - self.lineWidth
+                    let minY = min(self.points[0].y, self.points[1].y, self.points[2].y) - self.lineWidth
+                    let maxX = max(self.points[0].x, self.points[1].x, self.points[2].x) + self.lineWidth
+                    let maxY = max(self.points[0].y, self.points[1].y, self.points[2].y) + self.lineWidth
+                    let rect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+                    setNeedsDisplay(rect)
+                }
+                
+                self.points.removeAll()
+                
+                super.touchesEnded(touches, with: event)
     }
 
-    
-    private func interpolatePoints(p0: CGPoint, p1: CGPoint) -> [CGPoint] {
-        let numInterpolatedPoints = 5 // Adjust as needed
-        var points = [CGPoint]()
-        
-        for t in stride(from: 0.0, through: 1.0, by: 1.0 / Double(numInterpolatedPoints)) {
-            let x = p0.x + (p1.x - p0.x) * CGFloat(t)
-            let y = p0.y + (p1.y - p0.y) * CGFloat(t)
-            points.append(CGPoint(x: x, y: y))
-        }
-        
-        return points
-    }
-    
-    private func controlPointForPoints(p0: CGPoint, p1: CGPoint, p2: CGPoint) -> CGPoint {
-        let x = p1.x + (p0.x - p2.x) / 4.0
-        let y = p1.y + (p0.y - p2.y) / 4.0
-        return CGPoint(x: x, y: y)
-    }
 }
+import UIKit
 
 class ViewController: UIViewController {
-    var canvas: Canvas!
-    
+
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        canvas = Canvas()
-        canvas.isMultipleTouchEnabled = true
-        view.addSubview(canvas)
-        canvas.backgroundColor = .white
-        canvas.frame = view.frame
+        // Create an instance of QuadBezierCurveDrawView
+        let drawView = QuadBezierCurveDrawView(frame: view.bounds)
+        drawView.lineWidth = 10.0 // Set desired line width
+        view.addSubview(drawView)
     }
 }
