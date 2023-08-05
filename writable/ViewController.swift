@@ -1,36 +1,45 @@
 import UIKit
 
 class Canvas: UIView {
-    var bezier = UIBezierPath()
+    var path = UIBezierPath()
     var strokeColor = UIColor.black
     var strokeWidth: CGFloat = 10.0
+    var previousPoint: CGPoint?
     
     override func draw(_ rect: CGRect) {
         strokeColor.setStroke()
-        bezier.lineWidth = strokeWidth
-        bezier.lineCapStyle = .round
-        bezier.lineJoinStyle = .round
-        bezier.stroke()
+        path.lineWidth = strokeWidth
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        path.stroke()
     }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
-        bezier.move(to: location)
+        path.move(to: location)
+        previousPoint = location
         setNeedsDisplay()
     }
     
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
+        guard let touch = touches.first, let previousPoint = previousPoint else { return }
         let location = touch.location(in: self)
         
-        let previousLocation = bezier.currentPoint
-        let midPoint1 = CGPoint(x: (previousLocation.x + location.x) / 2, y: (previousLocation.y + location.y) / 2)
-        let midPoint2 = CGPoint(x: (midPoint1.x + location.x) / 2, y: (midPoint1.y + location.y) / 2)
+        addSmoothCurve(to: location, from: previousPoint)
+        self.previousPoint = location
         
-        bezier.addCurve(to: midPoint2, controlPoint1: midPoint1, controlPoint2: previousLocation)
         setNeedsDisplay()
     }
+    
+    private func addSmoothCurve(to endPoint: CGPoint, from startPoint: CGPoint) {
+        let controlPoint = CGPoint(x: startPoint.x + (endPoint.x - startPoint.x) / 3,
+                                   y: startPoint.y + (endPoint.y - startPoint.y) / 3)
+        
+        path.addQuadCurve(to: endPoint, controlPoint: controlPoint)
+    }
+    
+    
 }
 
 class ViewController: UIViewController {
