@@ -24,9 +24,11 @@ class Canvas: UIView {
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
         
-        let midPoint = CGPoint(x: (bezier.currentPoint.x + location.x) / 2, y: (bezier.currentPoint.y + location.y) / 2)
-        bezier.addQuadCurve(to: location, controlPoint: midPoint)
+        let previousLocation = bezier.currentPoint
+        let midPoint1 = CGPoint(x: (previousLocation.x + location.x) / 2, y: (previousLocation.y + location.y) / 2)
+        let midPoint2 = CGPoint(x: (midPoint1.x + location.x) / 2, y: (midPoint1.y + location.y) / 2)
         
+        bezier.addCurve(to: midPoint2, controlPoint1: midPoint1, controlPoint2: previousLocation)
         setNeedsDisplay()
     }
 }
