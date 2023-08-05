@@ -1,80 +1,58 @@
 import UIKit
+import CoreGraphics
+
 
 class Canvas: UIView {
     
-    override func draw(_ rect: CGRect) {
-        // custom drawing
-        super.draw(rect)
-        
-        guard let context = UIGraphicsGetCurrentContext() else { return }
-        
-        context.setStrokeColor(UIColor.red.cgColor)
-        context.setLineWidth(10)
-        context.setLineCap(.butt)
-        
-        lines.forEach { (line) in
-            for (i, p) in line.enumerated() {
-                if i == 0 {
-                    context.move(to: p)
-                } else {
-                    context.addLine(to: p)
-                }
-            }
-        }
-        
-        context.strokePath()
-    }
-    
-    var lines = [[CGPoint]]()
+    var bezier = UIBezierPath()
+    var firstPoint: CGPoint?
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        lines.append([CGPoint]())
+        for touch in touches {
+                    let location = touch.location(in: self)
+                        print(location)
+                    firstPoint = location
+                    bezier.move(to: firstPoint!)
+                    
+                }
+        print(event?.timestamp)
+        print(event?.type)
+        print("\n L")
     }
+    
+    
+    
     
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        handleTouches(touches)
+        for touch in touches {
+                    let location = touch.location(in: self)
+                    print("touch move \(location)")
+                }
+
     }
     
-    // Additional method to handle Pencil touches
-    func handlePencilTouches(_ touches: Set<UITouch>) {
-        guard let touch = touches.first else { return }
-        
-        // Only accept touches from the Apple Pencil
-        if touch.type == .pencil {
-            let point = touch.location(in: self)
-            
-            guard var lastLine = lines.popLast() else { return }
-            lastLine.append(point)
-            lines.append(lastLine)
-            
-            setNeedsDisplay()
-        }
+    override func draw(_ rect: CGRect) {
+        UIColor.black.setStroke()
+        bezier.stroke()
+        setNeedsDisplay()
     }
     
-    // Combining touch and Apple Pencil handling
-    func handleTouches(_ touches: Set<UITouch>) {
-        if touches.contains(where: { $0.type == .pencil }) {
-            handlePencilTouches(touches)
-        } else {
-            guard let point = touches.first?.location(in: nil) else { return }
-            
-            guard var lastLine = lines.popLast() else { return }
-            lastLine.append(point)
-            lines.append(lastLine)
-            
-            setNeedsDisplay()
-        }
-    }
+    
 }
 
 class ViewController: UIViewController {
-    let canvas = Canvas()
+    
+    var canvas: Canvas!
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        canvas = Canvas()
+        canvas.isMultipleTouchEnabled = true
         
         view.addSubview(canvas)
         canvas.backgroundColor = .white
         canvas.frame = view.frame
     }
 }
+
